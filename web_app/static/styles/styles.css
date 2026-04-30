@@ -234,18 +234,7 @@ body {
     border: 1px solid var(--level-color);
 }
 
-/* .value-cell {
-    display: flex;
-    /* flex-direction: column; */
-/* align-items: flex-start;
-    gap: 2px;
-} */
-
-/* .value {
-    font-weight: 500;
-    font-size: 0.95em;
-} */
-*/ .value-cell {
+.value-cell {
     padding: 6px;
 }
 

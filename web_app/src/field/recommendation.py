@@ -1,3 +1,7 @@
+"""
+Module for generating fertilizer recommendations.
+"""
+
 from data_base.connection import get_connection
 from src.field.simulation import Simulation
 
@@ -5,6 +9,10 @@ import pandas as pd
 
 
 class Recommendation:
+    """
+    Class responsible for preparing the recommendation.
+    """
+
     micro_ = ["Fe", "Zn", "Mn", "Cu", "B", "Mo"]
     macro_ = ["N", "P", "K", "Mg", "Ca", "S"]
 
@@ -27,6 +35,10 @@ class Recommendation:
         self.cur = self.connection.cursor()
 
     def get_crop_nutrition_uptake(self):
+        """
+        Gets from the database how many tons/grams per hectare
+        are required by the crop the user is growing to produce 1 ton of yield.
+        """
         self.cur.execute(
             """
                 SELECT * 
@@ -36,18 +48,19 @@ class Recommendation:
             (self.crop_id,),
         )
         result = self.cur.fetchone()
-        print(result)
 
         if result:
             columns = [desc[0] for desc in self.cur.description]
             crop_nutrition_uptake = pd.DataFrame([result], columns=columns)
-            print(crop_nutrition_uptake)
         else:
             crop_nutrition_uptake = None
 
         return crop_nutrition_uptake
 
     def get_fertilizers_data(self):
+        """
+        Retrieves fertilizer data from the database.
+        """
         self.cur.execute(
             """
                 SELECT *
@@ -64,6 +77,10 @@ class Recommendation:
         return fertilizers
 
     def elems_per_zone(self, df_of_zone):
+        """
+        Creates a list of elements for a zone whose levels need to be improved
+        to increase yield.
+        """
         elems = dict()
 
         if df_of_zone["orig_prediction"] < df_of_zone["simulated_prediction"]:
@@ -76,6 +93,10 @@ class Recommendation:
         return elems
 
     def oxid_form_convertation(self, elems):
+        """
+        Converts an element into its oxide form to correctly account for it
+        when searching for required substances in fertilizer.
+        """
         cols = []
         for elem in elems.keys():
             if elem in self.oxid_form_of_elems.keys():
@@ -85,8 +106,9 @@ class Recommendation:
         return cols
 
     def calculate_deficit(self, elem, original_, new_):
-        if abs(original_) < 1e-9:
-            return 0.0
+        """
+        Calculates the deficiency of an element in the soil.
+        """
         deficit = new_ - original_
         if elem in self.micro_:
             deficit_kg = (deficit * 3.75) / 1000
@@ -98,6 +120,9 @@ class Recommendation:
         return deficit_kg
 
     def get_crop_need(self, elem, target_yield, crops_nutritients):
+        """
+        Calculates how much of an element is required by the plant to achieve the target yield.
+        """
         if elem in self.oxid_form_of_elems:
             oxid_value = (
                 crops_nutritients.get(self.oxid_form_of_elems[elem], 0) * target_yield
@@ -110,6 +135,11 @@ class Recommendation:
             return crops_nutritients.get(elem, 0) * target_yield
 
     def fertilizer_mapping(self):
+        """
+        Calculates the required amount of fertilizer and maps it
+        to available fertilizers in the database
+        to find an optimal solution.
+        """
         ferlizers = self.get_fertilizers_data()
         if ferlizers is None or ferlizers.empty:
             raise ValueError("Fertilizers table is empty")

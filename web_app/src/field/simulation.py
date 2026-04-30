@@ -1,9 +1,12 @@
+"""
+Class that implements the simulation process, including preparing data
+in the correct format for that process.
+"""
+
 import pandas as pd
-import random
 import joblib
 import shap
 from itertools import combinations, product
-import time
 
 from datetime import datetime
 
@@ -12,8 +15,12 @@ from data_base.connection import get_connection
 
 
 class Simulation:
+    """
+    Class that implements the simulation process.
+    """
+
     LIST_OF_CULTURES = [
-        "Crop_33",
+        "Crop_22",
         "Crop_34",
         "Crop_41",
         "Crop_45",
@@ -42,7 +49,7 @@ class Simulation:
         "Crop_34",
         "Crop_41",
         "Crop_45",
-        "Crop_33",
+        "Crop_22",
         "Crop_174",
     ]
 
@@ -64,11 +71,17 @@ class Simulation:
         self.cur = self.connection.cursor()
 
     def get_weather_data(self):
+        """
+        Creates an instance of the WeatherDataPreparation class and
+        retrieves weather data in the correct format for the simulation process.
+        """
         weather_ = WeatherDataPreparation(self.user_id, self.year)
-        # print("WEATHER DATA GOTTEN BY SIMULATION", weather_)
         return weather_.get_weather_data()
 
     def get_data(self):
+        """
+        Retrieves chemical analysis data for a specific field of a specific user.
+        """
         self.cur.execute(
             """
                 SELECT soil_analysis
@@ -77,30 +90,30 @@ class Simulation:
             """,
             (self.user_id, self.field_name),
         )
-        print("SELF USER ID")
-        print(self.user_id)
         result = self.cur.fetchone()
 
         if result:
             soil_analysis = result[0]
         else:
             soil_analysis = None
-        # print("SOIL ANALYSIS in SIMULATION, ", soil_analysis)
         return soil_analysis
-    
+
     def features_formulation(self):
+        """
+        Prepares features in the format required by the model.
+        """
         features = []
 
         soil_analysis = pd.DataFrame(self.get_data())
         if soil_analysis is None:
             raise ValueError(f"No soil data for field '{self.field_name}'")
-        
+
         self.ZONE_NAME = soil_analysis["Name"].to_dict()
 
         weather_data = self.get_weather_data()
         if weather_data is None or weather_data.empty:
             raise ValueError("Weather data unavailable")
-        
+
         crop = self.crop_id
 
         soil_data = soil_analysis.drop(
@@ -124,7 +137,7 @@ class Simulation:
             ],
             errors="ignore",
         )
-        soil_data = soil_data.rename(columns={"Organic M": "Organic_M"})
+        soil_data = soil_data.rename(columns={"OM": "Organic_M"})
 
         X_ = pd.DataFrame(index=range(len(soil_data)), columns=self.FEATURES)
 
@@ -145,13 +158,13 @@ class Simulation:
             errors="ignore",
         )
 
-        scaler_features = self.XGB_SCALER.feature_names_in_.tolist()
-        X_ = X_[scaler_features]
-
-        # print("FEATURES IN SIMULATION, ", X_)
         return X_
 
     def get_chem_needs_for_crop(self, crop_id):
+        """
+        Retrieves from the database the chemical requirements of the crop
+        the user wants to grow.
+        """
         self.cur.execute(
             """
                 SELECT elements
@@ -166,10 +179,12 @@ class Simulation:
             crop_needs = result[0]
         else:
             crop_needs = None
-        print("CHEMICALS NEED FOR CROP IN SIMULATION ", crop_needs)
         return crop_needs
 
     def epsilots_data(self, elem):
+        """
+        Data describing chemical level characteristics for a chemical element.
+        """
         self.cur.execute(
             """
                 SELECT min_elem_value, max_elem_value, content_level
@@ -186,15 +201,16 @@ class Simulation:
         else:
             EPSILOTS = None
 
-        # print("EPSILOTS FOR CROP IN SIMULATION", EPSILOTS)
         return EPSILOTS
 
     def level_chem_element(self, element, value):
+        """
+        Creates a list of chemical element levels for the simulation.
+        """
         elem_data = self.epsilots_data(element)
         elem_level = None
 
         for _, row in elem_data.iterrows():
-            # print(row)
             if row["min_elem_value"] <= value <= row["max_elem_value"]:
                 level = row["content_level"]
                 if level in self.ALLOWED_CHEM_LEVELS:
@@ -213,14 +229,19 @@ class Simulation:
         return levels
 
     def calculate_percentage_increase(self, orig_value, new_value):
+        """
+        Calculates the percentage increase in yield based on changes in chemical elements.
+        """
         return ((new_value - orig_value) / abs(orig_value)) * 100
 
     def simulation(self, X_):
+        """
+        Simulation process.
+        """
         columns = X_.columns
         needed_chem_elements_for_crop = self.get_chem_needs_for_crop(self.crop_id)
 
         X_scaled_ = self.XGB_SCALER.fit_transform(X_)
-        predicted_yield_ = self.XGB_MODEL.predict(X_scaled_)
 
         xgb_explainer = shap.TreeExplainer(self.XGB_MODEL, X_scaled_)
         shap_values_ridge = xgb_explainer(X_scaled_)
@@ -264,14 +285,9 @@ class Simulation:
                         if elem_data.empty:
                             continue
 
-                        # if level != "Very high":
-                        X_simulation.iloc[0, elem] = elem_data[
-                            "max_elem_value"
-                        ].values[0]
-                        # else:
-                        #     X_simulation.iloc[0, elem] = elem_data[
-                        #         "min_elem_value"
-                        #     ].values[0]
+                        X_simulation.iloc[0, elem] = elem_data["max_elem_value"].values[
+                            0
+                        ]
 
                     data_.append(X_simulation.values[0])
                     technical_data.append(
@@ -303,7 +319,6 @@ class Simulation:
                 continue
 
             new_X = pd.DataFrame(data_, columns=X_.columns)
-            # print(new_X)
             X_simulations_scaled = self.XGB_SCALER.transform(new_X)
             simulated_prediction = self.XGB_MODEL.predict(X_simulations_scaled)
 
@@ -319,9 +334,14 @@ class Simulation:
         return HISTORY_
 
     def return_zone_names(self):
-        print(self.ZONE_NAME)
+        """
+        Returns a dictionary of field zone names.
+        """
         return self.ZONE_NAME
 
     def return_simulation(self):
+        """
+        Returns the simulation results.
+        """
         X_ = self.features_formulation()
         return self.simulation(X_)

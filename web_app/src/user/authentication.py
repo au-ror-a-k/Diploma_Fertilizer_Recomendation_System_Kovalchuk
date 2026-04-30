@@ -1,3 +1,7 @@
+"""
+Module that implements user authentication functionality.
+"""
+
 from flask import Blueprint, request, redirect, render_template, session, jsonify
 from argon2 import PasswordHasher
 from argon2.exceptions import VerifyMismatchError
@@ -15,6 +19,11 @@ email_regex = re.compile(r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,7}")
 
 @auth.route(BASE + "/register", methods=["GET", "POST"])
 def register():
+    """
+    User registration function that saves the provided data to the database
+    and redirects the user to the login page.
+    """
+
     if request.method == "POST":
         name = request.form["name"]
         surname = request.form["surname"]
@@ -24,11 +33,14 @@ def register():
         repeat_password = request.form["repeat_password"]
 
         if len(password) < 8:
-            return jsonify({"error": "Password must be at least 8 characters long"}), 400
+            return (
+                jsonify({"error": "Password must be at least 8 characters long"}),
+                400,
+            )
 
         if password != repeat_password:
             return jsonify({"error": "Passwords do not match"}), 400
-        
+
         hash_password = pass_hasher.hash(password)
 
         if not email_regex.match(gmail):
@@ -59,6 +71,12 @@ def register():
 
 @auth.route(BASE + "/login", methods=["GET", "POST"])
 def login():
+    """
+    Login function that verifies whether the user already has an account
+    and whether the provided password matches the one stored in the database,
+    then redirects to the "Your Fields" page.
+    """
+
     if request.method == "POST":
         gmail = request.form["gmail"]
         password = request.form["password"]
@@ -73,7 +91,7 @@ def login():
         )
         result = cur.fetchone()
         if not result:
-            return jsonify({"error":"Invalid credentials"}), 401
+            return jsonify({"error": "Invalid credentials"}), 401
 
         user_id, user_password = result
         conn.close()

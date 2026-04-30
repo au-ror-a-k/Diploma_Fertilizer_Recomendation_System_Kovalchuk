@@ -32,34 +32,6 @@ if (submit_field_creation) {
         formData.append("target_yield_field", target_yield_field.value)
         formData.append("soil_analysis", file.files[0])
 
-        if (!field_name.value.trim() || !area.value.trim() || !farm.value.trim() ||
-            !crop.value.trim() || !target_yield_field.value.trim()) {
-            showToast("Please, fill all fields");
-            return;
-        }
-
-        const areaVal = parseFloat(area.value);
-        if (isNaN(areaVal) || areaVal <= 0) {
-            showToast("Area should be greater, than 0");
-            return;
-        }
-
-        const yieldVal = parseFloat(target_yield_field.value);
-        if (isNaN(yieldVal) || yieldVal <= 0) {
-            showToast("Target Yield should be greater, than 0");
-            return;
-        }
-
-        if (!file.files || file.files.length === 0) {
-            showToast("Upload soil analysis file");
-            return;
-        }
-
-        if (!file.files[0].name.toLowerCase().endsWith('.csv')) {
-            showToast("Only CSV files allowed");
-            return;
-        }
-
         try {
             const response = await fetch("/diploma/fertilizer_recommendation/field_creation", {
                 method: "POST",
@@ -71,11 +43,17 @@ if (submit_field_creation) {
                 return;
             }
 
+            if (response.status === 409) {
+                showToast("Field with such a name already exists");
+            }
+
+            if (response.status === 400) {
+                const data = await response.json();
+                showToast(data.error || "Submission failed");
+            }
+
         } catch {
             showToast("No server connection");
         }
-        const data = await response.json();
-        showToast(data.error || "Submission failed");
-        
     });
 }

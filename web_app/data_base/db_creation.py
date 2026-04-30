@@ -1,8 +1,17 @@
+"""
+Creates the database and populates the initial tables
+"""
+
 import psycopg2
-import pandas as pd
 
 
 def get_connection():
+    """
+    Function that establishes a
+    connection with database
+
+    Returns False if connection fails
+    """
     try:
         return psycopg2.connect(
             database="postgres",

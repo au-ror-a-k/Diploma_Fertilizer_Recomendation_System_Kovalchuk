@@ -4,10 +4,6 @@ function showToast(message, type = 'error') {
     toast.textContent = message;
     toast.style.cssText = `
         position: fixed; bottom: 24px; right: 24px;
-        background: ${colors[type] || colors.error};
-        color: white; padding: 12px 20px; border-radius: 8px;
-        font-family: 'Alice', Georgia, serif; font-size: 14px;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.2); z-index: 9999;
     `;
     document.body.appendChild(toast);
     setTimeout(() => toast.remove(), 4000);

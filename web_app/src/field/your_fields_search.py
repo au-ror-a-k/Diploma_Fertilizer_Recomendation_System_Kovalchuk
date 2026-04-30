@@ -1,10 +1,18 @@
+"""
+Module for handling field-related information for the "Your Fields" page
+and the Field page.
+"""
+
 import pandas as pd
-import json
 
 from data_base.connection import get_connection
 
 
 class YourFieldsSearch:
+    """
+    Class for handling information about a single field or all user fields.
+    """
+
     ELEM_COLUMN_MAP = {
         "pH": "pH",
         "P": "P",
@@ -36,6 +44,9 @@ class YourFieldsSearch:
         self.cur = self.connection.cursor()
 
     def search_field_data(self, user_id, field_name):
+        """
+        Searches for field information for a specific user by a specific field name.
+        """
         self.cur.execute(
             """
                 SELECT soil_analysis, farm_name, crop_name
@@ -65,6 +76,10 @@ class YourFieldsSearch:
         return pd.concat(all_fields, ignore_index=True)
 
     def get_guideline_data(self):
+        """
+        Retrieves information about soil chemical element level classifications,
+        such as "Very low" or "High".
+        """
         self.cur.execute(
             """
                 SELECT *
@@ -75,14 +90,17 @@ class YourFieldsSearch:
 
         if result:
             cols = [desc[0] for desc in self.cur.description]
-            # print("COOOOLS ", cols)
             guideline_data = pd.DataFrame(result, columns=cols)
         else:
             guideline_data = None
 
         return guideline_data
 
-    def color_grade_chem_level(self, fields):
+    def color_grade_chem_level(self, field):
+        """
+        Assigns the appropriate color from the elements_guideline table
+        to each element in each row of the field's chemical analysis data.
+        """
         guideline = self.get_guideline_data()
 
         for (
@@ -95,9 +113,8 @@ class YourFieldsSearch:
             levels = []
             colors = []
 
-            for _, field_row in fields.iterrows():
+            for _, field_row in field.iterrows():
                 value = field_row[element_name_in_fields]
-                value = self.VALIDATE_NAME_MAP.get(value, value)
 
                 for _, row in element_data.iterrows():
                     if row["min_elem_value"] <= value <= row["max_elem_value"]:
@@ -105,12 +122,15 @@ class YourFieldsSearch:
                         colors.append(row["color"])
                         break
 
-            fields[f"{element_name_in_fields}_level"] = levels
-            fields[f"{element_name_in_fields}_color"] = colors
+            field[f"{element_name_in_fields}_level"] = levels
+            field[f"{element_name_in_fields}_color"] = colors
 
-        return fields
+        return field
 
     def search_recommendation_data(self, user_id, field_name):
+        """
+        Searches for recommendation data for a specific field of a specific user.
+        """
         self.cur.execute(
             """
                 SELECT recommendation
@@ -134,6 +154,10 @@ class YourFieldsSearch:
         return pd.concat(all_recommendations, ignore_index=True)
 
     def format_data(self, user_id, field_name):
+        """
+        Merges field data with its recommendation and assigns the appropriate color
+        to the soil chemical analysis values.
+        """
         recommendation = self.search_recommendation_data(user_id, field_name)
         field = self.search_field_data(user_id, field_name)
 
@@ -157,6 +181,10 @@ class YourFieldsSearch:
         return merged
 
     def get_user_fields_list(self, user_id):
+        """
+        Gets a list of all user fields and farms for the Your Fields Page.
+        """
+
         self.cur.execute(
             """
                 SELECT farm_name, field_name

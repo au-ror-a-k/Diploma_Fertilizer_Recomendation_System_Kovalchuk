@@ -1,19 +1,26 @@
+"""
+Module that extract and formats weather data into the correct structure.
+"""
+
 from data_base.connection import get_connection
 
 from dotenv import load_dotenv
-import codecs
 import requests
 import os
-import sys
 import pandas as pd
 from datetime import datetime
 
 
-load_dotenv()
+load_dotenv(dotenv_path="config/dotenv/.env")
 API_KEY = os.getenv("API_KEY")
 
 
 class WeatherDataPreparation:
+    """
+    Class that checks whether the required data exists in the database and returns it;
+    if not, it fetches it from a weather API.
+    """
+
     def __init__(self, user_id, year):
         self.user_id = user_id
         self.year = year
@@ -27,6 +34,9 @@ class WeatherDataPreparation:
         self.cur = self.connection.cursor()
 
     def get_location_from_db(self):
+        """
+        Extracts the location for which weather data should be obtained.
+        """
         self.cur.execute(
             """
                 SELECT region 
@@ -45,7 +55,10 @@ class WeatherDataPreparation:
         return location
 
     def get_weather_from_db(self, location, year):
-        print(f"Searching DB: location={location!r}, year={year!r}, type={type(year)}")
+        """
+        Extracts weather data for the specified location and year from the database;
+        returns None if no data is found.
+        """
         self.cur.execute(
             """
                 SELECT * 
@@ -55,26 +68,30 @@ class WeatherDataPreparation:
             (location, year),
         )
         result_ = self.cur.fetchall()
-        # print(f"DB result count: {len(result_)}")
         columns = [desc[0] for desc in self.cur.description]
         df = pd.DataFrame(result_, columns=columns)
-        # df = df.drop(columns=["year"]).reset_index(drop=True)
 
         if result_:
             weather_data = df
         else:
             weather_data = None
-        # print("found weather data in db for location ", location, " and year ", year)
 
         return weather_data
 
     def dates_formulation(self):
+        """
+        Formats the sowing and harvesting dates into the required structure
+        for the API request.
+        """
         start_date = datetime(self.year, 5, 1).strftime("%Y-%m-%d")
         end_date = datetime(self.year, 10, 31).strftime("%Y-%m-%d")
 
         return start_date, end_date
 
     def api_query_formulation(self, location):
+        """
+        Construct the API request.
+        """
         start_date, end_date = self.dates_formulation()
         api_query = self.base_url + location
 
@@ -95,13 +112,14 @@ class WeatherDataPreparation:
             api_query += "&include=" + self.include
 
         api_query += "&key=" + API_KEY
-        print("API QUERY:", api_query)
+
         return api_query
 
     def get_weather_from_api(self, api_query):
+        """
+        Weather API request
+        """
         response = requests.get(api_query)
-        # print("STATUS:", response.status_code)
-        # print("TEXT:", response.text[:300])
 
         if response.status_code != 200:
             raise Exception(
@@ -118,6 +136,9 @@ class WeatherDataPreparation:
         return weather_data
 
     def format_data(self, weather_data):
+        """
+        Format weather data from API response
+        """
         weather_data["datetime"] = pd.to_datetime(weather_data["datetime"])
         weather_data["month"] = weather_data["datetime"].dt.month
         weather_data["year"] = weather_data["datetime"].dt.year
@@ -168,6 +189,9 @@ class WeatherDataPreparation:
         return wether_table
 
     def write_weather_data_into_db(self, weather_data, location):
+        """
+        Write new weather data into DataBase
+        """
         columns = [col for col in weather_data.columns if col != "location"]
 
         values = ", ".join(["%s"] * (len(columns) + 1))
@@ -187,6 +211,11 @@ class WeatherDataPreparation:
         self.connection.commit()
 
     def get_weather_data(self):
+        """
+        Get weather data from DataBase,
+        if None, get weather data from API, write it into DataBase
+        return weather data
+        """
         location = self.get_location_from_db()
         db_weather_data = self.get_weather_from_db(location, self.year)
 
@@ -198,5 +227,4 @@ class WeatherDataPreparation:
         formatted_data = self.format_data(api_weather_data)
 
         self.write_weather_data_into_db(formatted_data, location)
-        print("Return weather data ", formatted_data)
         return formatted_data

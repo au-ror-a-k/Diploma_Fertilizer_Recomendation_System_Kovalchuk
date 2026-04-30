@@ -1,13 +1,15 @@
+"""
+The main file that connects the backend and frontend, 
+processes field-related data,
+uses the Recommendation class to generate recommendations, 
+and returns the data to the frontend.
+"""
+
 from flask import Flask, request, redirect, render_template, session, jsonify
-
-
 from argon2 import PasswordHasher
 
 import pandas as pd
 import json
-
-# import re
-# import os
 
 from data_base.connection import get_connection
 
@@ -15,13 +17,14 @@ from src.user.authentication import auth
 from src.user.user_page import user_
 from src.user.login_required import login_required
 
-# from src.field.simulation import Simulation
 from src.field.recommendation import Recommendation
 from src.field.your_fields_search import YourFieldsSearch
 
 BASE = "/diploma/fertilizer_recommendation"
 
 app = Flask(__name__)
+# development only, should be replaced with a random secure key
+# via os.random or os.environ
 app.secret_key = "dev_secret_key"
 app.register_blueprint(auth)
 app.register_blueprint(user_)
@@ -59,15 +62,37 @@ VALIDATE_NAME_MAP = {
 
 
 def normalize_column_names(df):
+    """
+    Function that normalizes column names in the chemical analysis file
+    to a unified format.
+    """
     return df.rename(columns=VALIDATE_NAME_MAP)
+
+
+@app.route("/")
+def root():
+    """
+    Redirects the default load from 127.0.0.1:5000 to
+    127.0.0.1:5000/diploma/fertilizer_recommendation, since this is
+    the base URL for all routes.
+    """
+    return redirect(BASE)
 
 
 @app.route(BASE)
 def index():
+    """
+    Renders index.html as Welcome page of application
+    """
     return render_template("index.html")
 
 
 def get_field_data(user_id, field_name):
+    """
+    Gets user field data from the database.
+    This data is used to generate the recommendation.
+    """
+
     conn = get_connection()
     cur = conn.cursor()
 
@@ -96,6 +121,11 @@ def get_field_data(user_id, field_name):
 @app.route(BASE + "/recommendation", methods=["GET", "POST"])
 @login_required
 def recommendation_formulation():
+    """
+    Function that converts the recommendation from the format returned by the Recommendation
+    class into a format suitable for the frontend.
+    """
+
     id_user = session.get("user_id")
     field_name = request.args.get("field_name")
     if not field_name:
@@ -106,17 +136,17 @@ def recommendation_formulation():
     else:
         field_name = None
 
-    print("USER ID ", id_user)
-    print("FIELD NAME ", field_name)
+    # print("USER ID ", id_user)
+    # print("FIELD NAME ", field_name)
     crop_id, tagret_yield = get_field_data(id_user, field_name)
     if crop_id is None or tagret_yield is None:
         return jsonify({"error": "Crop or target yield not found"}), 404
 
-    print("FIELD NAME ", field_name)
-    print("Start recomendation")
+    # print("FIELD NAME ", field_name)
+    # print("Start recomendation")
     recommendation_ = Recommendation(id_user, crop_id, field_name, tagret_yield)
     recomendation = recommendation_.fertilizer_mapping()
-    print("Finish recomendation")
+    # print("Finish recomendation")
 
     conn = get_connection()
     cur = conn.cursor()
@@ -138,8 +168,12 @@ def recommendation_formulation():
 @app.route(BASE + "/your_fields_page", methods=["GET", "POST"])
 @login_required
 def field_search():
+    """
+    Gets all user fields for the "Your Fields" page
+    and returns them to the frontend for a specific user.
+    """
     user_id = session.get("user_id")
-    print("USER id ", user_id)
+    # print("USER id ", user_id)
     searcher = YourFieldsSearch(user_id)
     fields_data = searcher.get_user_fields_list(user_id)
     return render_template("your_fields_page.html", fields=fields_data)
@@ -148,6 +182,10 @@ def field_search():
 @app.route(BASE + "/field_creation", methods=["GET", "POST"])
 @login_required
 def add_field():
+    """
+    Adds a field created by the user and triggers the recommendation generation.
+    """
+
     if request.method == "POST":
         # print("FORM DATA:", dict(request.form))
         # print("FILES:", dict(request.files))
@@ -175,9 +213,6 @@ def add_field():
             df = pd.read_csv(soil_analysis)
             df = normalize_column_names(df)
         except Exception as e:
-            import traceback
-
-            traceback.print_exc()
             return jsonify({"error": f"Invalid CSV file: {e}"}), 400
 
         if df.empty:
@@ -197,7 +232,7 @@ def add_field():
             field_area = float(field_area)
             target_yield = float(target_yield_field)
         except ValueError:
-            return jsonify({"error": "Area and yield must be numbers"}), 400
+            return jsonify({"error": "Area and Ton must be numbers"}), 400
 
         conn = get_connection()
         cur = conn.cursor()
@@ -256,6 +291,11 @@ def add_field():
 @app.route(BASE + "/field", methods=["GET", "POST"])
 @login_required
 def one_field():
+    """
+    Gets information about a single field, including soil chemical analysis
+    and the recommendation, and formats it for the frontend.
+    """
+
     user_id = session.get("user_id")
     field_name = request.args.get("field_name")
 

@@ -14,9 +14,9 @@ def get_connection():
     """
     try:
         return psycopg2.connect(
-            database="fertilizer_recommendation_db",
+            database="postgres",
             user="postgres",
-            password="",  #your postgress user password
+            password="postgress",  # your postgress user password
             host="127.0.0.1",
             port=5432,
         )
